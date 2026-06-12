@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#C9A84C">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -208,6 +208,8 @@
 <div id="modal-root"></div>
 <div id="auth-root"></div>
 <div id="pin-overlay"></div>
+<div id="modo-op-overlay" style="display:none;position:fixed;inset:0;z-index:9990;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center"></div>
+<button id="btn-modo-op" onclick="toggleModoOp()" title="Modo Operação" style="position:fixed;bottom:20px;right:20px;z-index:9000;width:52px;height:52px;border-radius:50%;background:var(--gold);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:pointer"></button>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -318,7 +320,7 @@ async function cloudLoad(){
 const uid = () => Math.random().toString(36).slice(2,10);
 const fmtMoney = v => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(v||0);
 const fmtDate = d => { if(!d) return ''; const [y,m,day]=d.split('-'); return `${day}/${m}/${y}`; };
-const todayStr = () => new Date().toISOString().split('T')[0];
+const todayStr = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const calcLiquido = (v,fp) => fp==='debito'?v*(1-state.config.taxaDebito/100):fp==='credito'?v*(1-state.config.taxaCredito/100):v;
 const fmtPayment = fp => ({pix:'Pix',dinheiro:'Dinheiro',debito:`Débito (−${state.config.taxaDebito}%)`,credito:`Crédito (−${state.config.taxaCredito}%)`}[fp]||fp);
@@ -392,7 +394,7 @@ function weekStrip(){
 function migrarDados(){
   const c = state.config;
   c.servicos = Array.isArray(c.servicos) ? c.servicos.map(s=> typeof s==='string' ? {nome:s, preco:0, duracao:30} : {duracao:30, ...s}) : [];
-  if(!c.confirmacao) c.confirmacao = 'Olá {nome}! ✅ Seu horário na barbearia Na Régua está confirmado para {data} às {hora} ({servico}). Qualquer coisa, é só chamar!';
+  if(!c.confirmacao) c.confirmacao = 'Olá {nome}! ✅ Seu horário na Na Régua está confirmado para {data} às {hora} ({servico}). Qualquer coisa, é só chamar!';
   if(!c.msgAlteracao) c.msgAlteracao = 'Olá {nome}! ⚠️ Seu horário foi alterado. O novo horário é {data} às {hora} para {servico}. Qualquer dúvida, é só chamar! ✂️';
   if(!Array.isArray(c.lembretes)) c.lembretes = [];
   if(!Array.isArray(state.lembretesEnviados)) state.lembretesEnviados = [];
@@ -435,7 +437,7 @@ const ICON = {
   tag:(p,c)=>svg('<path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',p,c),
   cut:(p,c)=>svg('<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>',p,c),
 };
-const VERSAO='0.1.2';
+const VERSAO='0.9.2.1';
 
 /* ============ ESTADO ============ */
 let state = {
@@ -455,11 +457,11 @@ let state = {
     despesasFixas:[],
     barbearia:{nome:'Na Régua',endereco:''},
     lembretes:[
-      {id:'l1',horasAntes:24,template:'Olá {nome}! 🗓️ Lembrando do seu horário amanhã às {hora} para {servico} — Na Régua. Te esperamos! ✂️',ativo:true},
+      {id:'l1',horasAntes:24,template:'Olá {nome}! 🗓️ Lembrando do seu horário amanhã às {hora} para {servico} na Na Régua. Te esperamos! ✂️',ativo:true},
       {id:'l2',horasAntes:1,template:'Olá {nome}! ⏰ Seu horário é em 1 hora ({hora}) para {servico}. Já estamos te esperando! ✂️',ativo:true},
     ],
     msgAlteracao:'Olá {nome}! ⚠️ Seu horário foi alterado. O novo horário é {data} às {hora} para {servico}. Qualquer dúvida, é só chamar! ✂️',
-    confirmacao:'Olá {nome}! ✅ Seu horário na barbearia Na Régua está confirmado para {data} às {hora} ({servico}). Qualquer coisa, é só chamar!',
+    confirmacao:'Olá {nome}! ✅ Seu horário na Na Régua está confirmado para {data} às {hora} ({servico}). Qualquer coisa, é só chamar!',
     locais:[{id:'loc1',nome:'Unidade Principal'}],
     barbeiros:[],
     servicos:['Corte','Barba','Corte + Barba','Hidratação','Corte + Barba + Hidratação'],
@@ -723,6 +725,8 @@ function viewDashboard(){
     {l:'Agend. Hoje',v:aHoje.length,ic:'calendar',c:'var(--gold)',bg:'rgba(201,168,76,.08)'},
     {l:'Clientes',v:state.clientes.length,ic:'users',c:'var(--blue)',bg:'var(--blue-bg)'},
   ];
+  const aConcluidosHoje=state.agendamentos.filter(a=>a.data===t&&a.status==='concluido');
+  const ticketMedio=aConcluidosHoje.length>0?(receita/aConcluidosHoje.length):0;
   const nomeBarbearia = state.config.barbearia?.nome || 'Na Régua';
   return `
     <div style="margin-bottom:18px">
@@ -737,6 +741,10 @@ function viewDashboard(){
         <div style="width:38px;height:38px;border-radius:10px;background:${s.bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">${ICON[s.ic](17,s.c)}</div>
         <div><div style="font-size:16px;font-weight:700;color:${s.c}">${s.v}</div><div style="font-size:10px;color:var(--text-3);margin-top:1px">${s.l}</div></div>
       </div>`).join('')}
+      <div class="card" style="display:flex;align-items:center;gap:12px;padding:14px;grid-column:1/-1">
+        <div style="width:38px;height:38px;border-radius:10px;background:rgba(139,92,246,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">${ICON.award(17,'#A78BFA')}</div>
+        <div><div style="font-size:16px;font-weight:700;color:#A78BFA">${fmtMoney(ticketMedio)}</div><div style="font-size:10px;color:var(--text-3);margin-top:1px">Ticket médio hoje${aConcluidosHoje.length?` (${aConcluidosHoje.length} atend.)`:' — sem concluídos'}</div></div>
+      </div>
     </div>
     ${meta>0?`<div class="card" style="margin-bottom:16px;padding:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -764,8 +772,9 @@ function viewDashboard(){
 /* ============ AGENDA ============ */
 let agFiltro = todayStr();
 let agModo='novo';
-let agFiltroBarb='', agFiltroStatus='';
+let agFiltroBarb='', agFiltroStatus='', agSubModo='lista', agTimelineBarb='';
 function viewAgenda(){
+  if(agSubModo==='timeline') return viewAgendaTimeline();
   let lista=state.agendamentos.filter(a=>!agFiltro||a.data===agFiltro);
   if(agFiltroBarb) lista=lista.filter(a=>a.barbeiro===agFiltroBarb);
   if(agFiltroStatus) lista=lista.filter(a=>a.status===agFiltroStatus);
@@ -773,17 +782,22 @@ function viewAgenda(){
   const barbs=[...new Set(state.agendamentos.map(a=>a.barbeiro).filter(Boolean))];
   const filtroDesc = [agFiltroBarb?`barbeiro: ${agFiltroBarb}`:'', agFiltroStatus?`status: ${ST_LBL[agFiltroStatus]||agFiltroStatus}`:''  ].filter(Boolean).join(' · ');
   return `
-    <div class="sec-head"><div><h1>Agenda</h1><p>${lista.length} agendamento(s)${filtroDesc?' — '+filtroDesc:''}</p></div>
-      <button class="btn btn-primary" onclick="modalAgenda()">+ Novo Agendamento</button></div>
+    <div class="tabs" style="margin-bottom:0px"><button class="tab ${agSubModo==='lista'?'active':''}" onclick="agSubModo='lista';render()">📋 Lista</button><button class="tab ${agSubModo==='timeline'?'active':''}" onclick="agSubModo='timeline';render()">⏱ Timeline</button></div>
+    <div class="sec-head" style="margin-top:16px"><div><h1>Agenda</h1><p>${lista.length} agendamento(s)${filtroDesc?' — '+filtroDesc:''}</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-amber btn-sm" onclick="modalWalkIn()" style="display:flex;align-items:center;gap:5px">${ICON.plus(14,'#F59E0B')} Walk-in</button>
+        <button class="btn btn-primary" onclick="modalAgenda()">+ Novo Agendamento</button>
+      </div></div>
     ${weekStrip()}
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <input type="date" class="inp" style="flex:1;min-width:140px" value="${agFiltro}" onchange="agFiltro=this.value;render()">
       ${barbs.length>1?`<select class="inp" style="flex:1;min-width:120px" onchange="agFiltroBarb=this.value;render()"><option value="">Todos barbeiros</option>${barbs.map(b=>`<option value="${esc(b)}" ${agFiltroBarb===b?'selected':''}>${esc(b)}</option>`).join('')}</select>`:''}
       <select class="inp" style="flex:1;min-width:120px" onchange="agFiltroStatus=this.value;render()"><option value="">Todos status</option>${['agendado','concluido','cancelado'].map(s=>`<option value="${s}" ${agFiltroStatus===s?'selected':''}>${ST_LBL[s]}</option>`).join('')}</select>
     </div>
-    ${lista.length?lista.map(a=>`<div class="card list-item" style="padding:15px">
+    ${lista.length?lista.map(a=>`<div class="card list-item" style="padding:15px${a.isWalkIn?';border-left:3px solid var(--amber)':''}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-weight:700;font-size:14px;color:${ST_COLOR[a.status]}">${esc(a.clienteNome)}</span>
+          ${a.isWalkIn?`<span class="badge" style="background:var(--amber-bg);color:var(--amber)">⚡ Walk-in</span>`:''}
           <span class="badge" style="background:${ST_BG[a.status]};color:${ST_COLOR[a.status]}">${ST_LBL[a.status]}</span></div>
           <div style="font-size:12px;color:var(--text-2)">${a.ePacote?'<span style="color:var(--amber);font-size:11px;font-weight:700">📦 PACOTE · </span>':''}${esc(a.servico)}${servicoDuracao(a.servico)?' · '+servicoDuracao(a.servico)+'min':''}${a.barbeiro?' · '+esc(a.barbeiro):''}${a.clienteTelefone?' · '+esc(a.clienteTelefone):''}</div>
           ${a.obs?`<div style="font-size:11px;color:var(--text-3);margin-top:4px">${esc(a.obs)}</div>`:''}</div>
@@ -798,6 +812,59 @@ function viewAgenda(){
         <button class="btn btn-red btn-sm" onclick="delAgenda('${a.id}')">Remover</button>
       </div></div>`).join(''):`<div class="card empty">${ICON.calendar(36,'#252525')}<p>Nenhum agendamento para este dia</p><button class="btn btn-primary" onclick="modalAgenda()">Novo Agendamento</button></div>`}`;
 }
+/* ============ CORES DE SERVIÇOS (Melhoria 12) ============ */
+const SERVICO_PALETA=['#C9A84C','#60A5FA','#34D399','#F87171','#A78BFA','#FB923C','#38BDF8','#4ADE80','#E879F9','#FACC15'];
+function servicoCor(nome){
+  const idx=(state.config.servicos||[]).findIndex(s=>(s.nome||s)===nome);
+  if(idx>=0) return SERVICO_PALETA[idx % SERVICO_PALETA.length];
+  let h=0; for(let i=0;i<(nome||'').length;i++){h=(h*31+nome.charCodeAt(i))>>>0;} return SERVICO_PALETA[h % SERVICO_PALETA.length];
+}
+
+/* ============ TIMELINE POR BARBEIRO (Melhoria 2) ============ */
+function viewAgendaTimeline(){
+  const barbs=(state.config.barbeiros||[]);
+  if(!agTimelineBarb && barbs.length) agTimelineBarb=barbs[0];
+  const data=agFiltro||todayStr();
+  const slots=[];
+  for(let h=7;h<=21;h++){slots.push(String(h).padStart(2,'0')+':00');if(h<21)slots.push(String(h).padStart(2,'0')+':30');}
+  const ags=state.agendamentos.filter(a=>a.data===data&&(!agTimelineBarb||a.barbeiro===agTimelineBarb)&&a.status!=='cancelado');
+  return `
+    <div class="tabs" style="margin-bottom:0px"><button class="tab" onclick="agSubModo='lista';render()">📋 Lista</button><button class="tab active">⏱ Timeline</button></div>
+    <div class="sec-head" style="margin-top:16px"><div><h1>Timeline</h1><p>${esc(agTimelineBarb||'Todos')} · ${fmtDate(data)}</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-amber btn-sm" onclick="modalWalkIn()" style="display:flex;align-items:center;gap:5px">${ICON.plus(14,'#F59E0B')} Walk-in</button>
+        <button class="btn btn-primary" onclick="modalAgenda()">+ Novo Agendamento</button>
+      </div>
+    </div>
+    ${weekStrip()}
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      ${barbs.map(b=>`<button class="btn btn-sm ${agTimelineBarb===b?'btn-primary':''}" onclick="agTimelineBarb='${esc(b)}';render()">${esc(b)}</button>`).join('')}
+    </div>
+    <div class="card" style="padding:12px">
+      ${slots.map(slot=>{
+        const ag=ags.find(a=>a.hora===slot);
+        if(ag){
+          const cor=servicoCor(ag.servico);
+          return '<div style="display:flex;gap:10px;align-items:stretch;margin-bottom:6px">'
+            +'<div style="width:42px;font-size:11px;font-weight:700;color:var(--text-3);padding-top:6px;flex-shrink:0">'+slot+'</div>'
+            +'<div style="flex:1;background:'+cor+'22;border:2px solid '+cor+';border-radius:8px;padding:8px 12px;cursor:pointer" onclick="modalAgenda(\''+ag.id+'\')">'
+            +'<div style="font-weight:700;font-size:13px;color:'+cor+'">'+esc(ag.clienteNome)+(ag.isWalkIn?' ⚡':'')+'</div>'
+            +'<div style="font-size:11px;color:var(--text-2);margin-top:2px">'+esc(ag.servico)+'</div>'
+            +'<div style="display:flex;gap:6px;margin-top:6px">'
+            +(ag.status!=='concluido'
+              ?'<button class="btn btn-green btn-sm" style="font-size:10px;padding:2px 8px" onclick="event.stopPropagation();modalConcluir(\''+ag.id+'\')">✓ Concluir</button>'
+              :'<span style="font-size:10px;color:var(--green);font-weight:700">✓ Concluído</span>')
+            +'</div></div></div>';
+        } else {
+          const isHora=slot.endsWith(':00');
+          return '<div style="display:flex;gap:10px;align-items:center;margin-bottom:2px">'
+            +'<div style="width:42px;font-size:'+(isHora?'11':'10')+'px;color:var(--text-3);font-weight:'+(isHora?'700':'400')+';flex-shrink:0">'+slot+'</div>'
+            +'<div style="flex:1;height:'+(isHora?'22':'16')+'px;border-bottom:1px '+(isHora?'solid':'dashed')+' var(--border);opacity:0.5"></div></div>';
+        }
+      }).join('')}
+    </div>`;
+}
+
 function setStatusAg(id,st){
   const a=state.agendamentos.find(x=>x.id===id);
   if(a && st!=='concluido' && a.lancamentoId){
@@ -812,6 +879,46 @@ function delAgenda(id){
     if(a && a.lancamentoId){ state.lancamentos=state.lancamentos.filter(l=>l.id!==a.lancamentoId); save('lancamentos'); }
     state.agendamentos=state.agendamentos.filter(x=>x.id!==id); save('agendamentos'); render();
   }
+}
+/* ============ WALK-IN RÁPIDO ============ */
+let wiProdutos=[];
+function modalWalkIn(){
+  wiProdutos=[];
+  openModal(`
+    <div class="modal-head"><h2>⚡ Walk-in Rápido</h2><button onclick="closeModal()">${ICON.x(20)}</button></div>
+    <div style="padding:9px 12px;background:var(--amber-bg);border:1px solid rgba(245,158,11,.25);border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--amber)">
+      Cliente chegou sem agendamento — sem cadastro, sem burocracia.
+    </div>
+    <div class="field"><label class="lbl">Nome (apelido ou "Cliente")</label><input id="wi-nome" class="inp" placeholder="Ex: João, Cliente, Anônimo..."></div>
+    <div class="field"><label class="lbl">Serviço</label><select id="wi-serv" class="inp"><option value="">Selecionar...</option>${state.config.servicos.map(s=>`<option>${esc(s.nome||s)}</option>`).join('')}</select></div>
+    <div class="field"><label class="lbl">Barbeiro</label><select id="wi-barb" class="inp"><option value="">Selecionar...</option>${state.config.barbeiros.map(b=>`<option>${esc(b)}</option>`).join('')}</select></div>
+    <div class="field"><label class="lbl">Produtos vendidos (opcional)</label>
+      <select id="wi-prod-sel" class="inp" onchange="addWiProduto()"><option value="">Selecione um produto para adicionar...</option>${state.produtos.slice().sort((x,y)=>x.nome.localeCompare(y.nome)).map(p=>`<option value="${p.id}">${esc(p.nome)} · ${fmtMoney(p.preco)}</option>`).join('')}</select>
+      <div id="wi-prod-list" style="margin-top:8px"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-amber" onclick="saveWalkIn()">Adicionar na Agenda</button></div>
+  `);
+}
+function addWiProduto(){
+  const sel=document.getElementById('wi-prod-sel'); const p=state.produtos.find(x=>x.id===sel.value);
+  if(!p) return;
+  wiProdutos.push({id:p.id,nome:p.nome,preco:Number(p.preco)||0,custo:Number(p.custo)||0});
+  sel.value=''; renderWiProdutos();
+}
+function removeWiProduto(i){ wiProdutos.splice(i,1); renderWiProdutos(); }
+function renderWiProdutos(){
+  const box=document.getElementById('wi-prod-list'); if(!box) return;
+  box.innerHTML=wiProdutos.map((p,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--inner);border:1px solid var(--border);border-radius:7px;margin-bottom:6px;font-size:12px">
+    <span>${esc(p.nome)}</span><span style="display:flex;align-items:center;gap:10px"><span style="color:var(--gold)">${fmtMoney(p.preco)}</span><button onclick="removeWiProduto(${i})" style="background:none;border:none;color:var(--red);font-size:15px;cursor:pointer">×</button></span>
+  </div>`).join('');
+}
+function saveWalkIn(){
+  const nome=(document.getElementById('wi-nome').value.trim())||'Walk-in';
+  const servico=document.getElementById('wi-serv').value;
+  const barbeiro=document.getElementById('wi-barb').value;
+  if(!servico){alert('Selecione o serviço.');return;}
+  state.agendamentos.push({id:uid(),clienteNome:nome,clienteTelefone:'',servico,barbeiro,data:agFiltro||todayStr(),hora:horaAgora(),status:'agendado',obs:'',isWalkIn:true,wiProdutos:[...wiProdutos],createdAt:Date.now(),confirmacaoEnviada:false});
+  save('agendamentos'); closeModal(); render();
 }
 function modalAgenda(id){
   const dataDef = agFiltro||todayStr();
@@ -832,8 +939,8 @@ function modalAgenda(id){
       <div class="field"><label class="lbl">Nome do Cliente</label><input id="m-nome" class="inp" value="${esc(a.clienteNome)}" placeholder="Nome completo"></div>
       <div class="field"><label class="lbl">Telefone (WhatsApp)</label><input id="m-tel" class="inp" value="${esc(a.clienteTelefone)}" placeholder="(11) 99999-9999"></div>
     </div>
-    <div class="row2"><div class="field"><label class="lbl">Data</label><input id="m-data" type="date" class="inp" value="${a.data}" onchange="ajustarHoraMin()"></div>
-      <div class="field"><label class="lbl">Hora</label><input id="m-hora" type="time" class="inp" value="${a.hora}"></div></div>
+    <div class="row2"><div class="field"><label class="lbl">Data</label><input id="m-data" type="date" class="inp" style="max-width:100%;min-width:0" value="${a.data}" onchange="ajustarHoraMin()"></div>
+      <div class="field"><label class="lbl">Hora</label><select id="m-hora" class="inp" style="max-width:100%;min-width:0">${gerarSlotsHora(a.hora, a.data)}</select></div></div>
     <div class="field"><label class="lbl">Serviço</label><select id="m-serv" class="inp"><option value="">Selecionar...</option>${state.config.servicos.map(s=>`<option ${a.servico===s.nome?'selected':''}>${esc(s.nome)}</option>`).join('')}</select></div>
     <div class="field"><label class="lbl">Barbeiro</label><select id="m-barb" class="inp"><option value="">Selecionar...</option>${state.config.barbeiros.map(b=>`<option ${a.barbeiro===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
     <div class="field"><label class="lbl">Status</label><select id="m-status" class="inp">${['agendado','concluido','cancelado'].map(s=>`<option value="${s}" ${a.status===s?'selected':''}>${ST_LBL[s]}</option>`).join('')}</select></div>
@@ -844,11 +951,29 @@ function modalAgenda(id){
   setAgModo(agModo);
   ajustarHoraMin();
 }
-function horaAgora(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function horaAgora(){ const d=new Date(); const h=d.getHours(); const m=d.getMinutes()>=30?30:0; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
+function proximoSlotDisponivel(){ const agora=horaAgora(); const slots=[]; for(let h=6;h<=23;h++){ slots.push(String(h).padStart(2,'0')+':00'); if(h<23) slots.push(String(h).padStart(2,'0')+':30'); } return slots.find(s=>s>=agora)||'09:00'; }
+function gerarSlotsHora(selecionado, dataRef){
+  const slots=[];
+  for(let h=6;h<=23;h++){ slots.push(String(h).padStart(2,'0')+':00'); if(h<23) slots.push(String(h).padStart(2,'0')+':30'); }
+  const ehHoje = dataRef===todayStr();
+  const agora = ehHoje ? horaAgora() : '';
+  let sel = selecionado;
+  if(ehHoje && (!sel || sel < agora)) sel = proximoSlotDisponivel();
+  if(!sel || (!ehHoje && !slots.includes(sel))) sel = '09:00';
+  if(!slots.includes(sel)) sel = slots[0];
+  return slots.map(s=>{ const bloqueado=ehHoje&&s<agora; return `<option value="${s}" ${s===sel?'selected':''} ${bloqueado?'disabled':''}>${s}</option>`; }).join('');
+}
 function ajustarHoraMin(){
   const dataEl=document.getElementById('m-data'), horaEl=document.getElementById('m-hora');
   if(!dataEl||!horaEl) return;
-  if(dataEl.value===todayStr()) horaEl.min=horaAgora(); else horaEl.removeAttribute('min');
+  const ehHoje=dataEl.value===todayStr();
+  const agora=ehHoje?horaAgora():'';
+  Array.from(horaEl.options).forEach(o=>{ o.disabled=false; });
+  if(horaEl.options[horaEl.selectedIndex]&&horaEl.options[horaEl.selectedIndex].disabled){
+    const livre=Array.from(horaEl.options).find(o=>!o.disabled);
+    if(livre) horaEl.value=livre.value;
+  }
 }
 function setAgModo(m){
   agModo=m;
@@ -888,7 +1013,6 @@ function saveAgenda(id){
   const g=x=>document.getElementById(x).value;
   const data={clienteNome:g('m-nome').trim(),clienteTelefone:g('m-tel').trim(),servico:g('m-serv'),barbeiro:g('m-barb'),data:g('m-data'),hora:g('m-hora'),status:g('m-status'),obs:g('m-obs').trim()};
   if(!data.clienteNome||!data.servico||!data.data||!data.hora){ alert('Preencha nome, serviço, data e hora.'); return; }
-  if(!id && data.data===todayStr() && data.hora < horaAgora()){ alert('Esse horário já passou hoje. Escolha um horário a partir de agora.'); return; }
   // detecta serviço de pacote
   let pacoteRef={};
   if(data.servico.startsWith('PACOTE:')){
@@ -1103,6 +1227,7 @@ function modalConcluir(id){
   concluirTmp={formaPagamento:'pix'};
   concluirProdutos=[];
   const preco=servicoPreco(a.servico);
+  const precoVigente=preco; // captura preço atual do serviço no momento do atendimento
   openModal(`
     <div class="modal-head"><h2>Concluir Atendimento</h2><button onclick="closeModal()">${ICON.x(20)}</button></div>
     <div style="font-size:13px;color:var(--text-2);margin-bottom:14px">${esc(a.clienteNome)} · ${esc(a.servico)}</div>
@@ -1166,7 +1291,7 @@ function confirmarConcluir(id){
   const lancId=uid();
   const nomesProd=concluirProdutos.map(p=>p.nome);
   const desc=`${a.servico} — ${a.clienteNome}`+(nomesProd.length?` (+ ${nomesProd.join(', ')})`:'');
-  state.lancamentos.push({id:lancId,tipo:'entrada',descricao:desc,categoria:'Serviço',valor:f,valorLiquido:liq,formaPagamento:concluirTmp.formaPagamento,data:a.data,createdAt:Date.now(),origem:'agendamento',produtosComanda:concluirProdutos.map(p=>({id:p.id,nome:p.nome,preco:p.preco,custo:p.custo||0}))});
+  state.lancamentos.push({id:lancId,tipo:'entrada',descricao:desc,categoria:'Serviço',valor:f,valorLiquido:liq,formaPagamento:concluirTmp.formaPagamento,data:a.data,createdAt:Date.now(),origem:'agendamento',produtosComanda:concluirProdutos.map(p=>({id:p.id,nome:p.nome,preco:p.preco,custo:p.custo||0})),precoVigente:servicoPreco(a.servico)});
   if(concluirProdutos.length){
     concluirProdutos.forEach(cp=>{ const prod=state.produtos.find(x=>x.id===cp.id); if(prod && prod.estoque!==''&&prod.estoque!=null) prod.estoque=Math.max(0,parseInt(prod.estoque)-1); });
     save('produtos');
@@ -1297,7 +1422,8 @@ function modalHist(id){
 /* ============ BARBEIROS ============ */
 let barbFiltro=todayStr(), barbModo='periodo', barbFiltroInicio=todayStr().slice(0,8)+'01', barbFiltroFim=todayStr();
 function barbNavDate(dir){ return barbFiltro; }
-function barbPeriodoLabel(){if(barbModo==='periodo') return `${fmtDate(barbFiltroInicio)} – ${fmtDate(barbFiltroFim)}`;
+function barbPeriodoLabel(){
+  if(barbModo==='periodo') return `${fmtDate(barbFiltroInicio)} – ${fmtDate(barbFiltroFim)}`;
   if(barbModo==='dia') return fmtDate(barbFiltro);
   if(barbModo==='semana'){ const w=weekDays(barbFiltro); return `${fmtDate(w[0])} – ${fmtDate(w[6])}`; }
   return new Date(barbFiltro+'-01T12:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
@@ -1306,32 +1432,33 @@ function viewBarbeiros(){
   const barbs=state.config.barbeiros||[];
   const com=state.config.comissoes||{};
   const dias=barbModo==='semana'?weekDays(barbFiltro):[];
-  const filtroAg=a=>{if(barbModo==='periodo') return (a.data||'')>=barbFiltroInicio&&(a.data||'')<=barbFiltroFim;
+  const filtroAg=a=>{
+    if(barbModo==='periodo') return (a.data||'')>=barbFiltroInicio&&(a.data||'')<=barbFiltroFim;
     if(barbModo==='dia') return a.data===barbFiltro;
     if(barbModo==='semana') return dias.includes(a.data);
     return (a.data||'').startsWith(barbFiltro.slice(0,7));
   };
-  const modos=[['periodo','Período'],['dia','Dia'],['semana','Semana'],['mes','Mês']];
+  const modos=[['periodo','Período'],['dia','Dia'],['semana','Semana'],['mes','Mês']];  
   return `
     <div class="sec-head"><div><h1>Barbeiros</h1><p>Produção e comissões por período</p></div></div>
     <div class="tabs" style="margin-bottom:12px">${modos.map(([id,l])=>`<button class="tab ${barbModo===id?'active':''}" onclick="barbModo='${id}';render()">${l}</button>`).join('')}</div>
-    // DEPOIS
-${barbModo==='periodo'?`
-<div class="card" style="padding:14px;margin-bottom:16px">
-  <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Selecionar período</div>
-  <div class="row2">
-    <div class="field"><label class="lbl">De</label><input type="date" class="inp" value="${barbFiltroInicio}" onchange="barbFiltroInicio=this.value;render()"></div>
-    <div class="field"><label class="lbl">Até</label><input type="date" class="inp" value="${barbFiltroFim}" onchange="barbFiltroFim=this.value;render()"></div>
-  </div>
-  <div style="font-size:12px;color:var(--gold);font-weight:600;text-align:center">${barbPeriodoLabel()}</div>
-</div>`:`
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
-  <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(-1)}';render()">‹</button>
-  <span style="font-size:13px;font-weight:600;color:var(--gold);flex:1;text-align:center">${barbPeriodoLabel()}</span>
-  ${barbModo==='dia'?`<input type="date" class="inp" style="max-width:140px" value="${barbFiltro}" onchange="barbFiltro=this.value;render()">`:barbModo==='mes'?`<input type="month" class="inp" style="max-width:140px" value="${barbFiltro.slice(0,7)}" onchange="barbFiltro=this.value+'-01';render()">`:``}
-  <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(1)}';render()">›</button>
-</div>`}
+    ${barbModo==='periodo'?`
+    <div class="card" style="padding:14px;margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Selecionar período</div>
+      <div class="row2">
+        <div class="field"><label class="lbl">De</label><input type="date" class="inp" style="max-width:100%;min-width:0" value="${barbFiltroInicio}" onchange="barbFiltroInicio=this.value;render()"></div>
+        <div class="field"><label class="lbl">Até</label><input type="date" class="inp" style="max-width:100%;min-width:0" value="${barbFiltroFim}" onchange="barbFiltroFim=this.value;render()"></div>
+      </div>
+      <div style="font-size:12px;color:var(--gold);font-weight:600;text-align:center">${barbPeriodoLabel()}</div>
+    </div>`:`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(-1)}';render()">‹</button>
+      <span style="font-size:13px;font-weight:600;color:var(--gold);flex:1;text-align:center">${barbPeriodoLabel()}</span>
+      ${barbModo==='dia'?`<input type="date" class="inp" style="max-width:140px" value="${barbFiltro}" onchange="barbFiltro=this.value;render()">`:barbModo==='mes'?`<input type="month" class="inp" style="max-width:140px" value="${barbFiltro.slice(0,7)}" onchange="barbFiltro=this.value+'-01';render()">`:``}
+      <button class="btn btn-sm" onclick="barbFiltro='${barbNavDate(1)}';render()">›</button>
+    </div>`}
     ${barbs.length?barbs.map(b=>{
+      const ultimoPagto = (state.config.comissoesPagas||{})[b] || 0;
       const ags=state.agendamentos.filter(a=>a.barbeiro===b&&a.status==='concluido'&&filtroAg(a));
       const agsPag=ags.filter(a=>!a.ePacote);
       const agsPac=ags.filter(a=>a.ePacote);
@@ -1371,16 +1498,16 @@ ${barbModo==='periodo'?`
         ${ags.length===0?`<p style="font-size:12px;color:var(--text-3);text-align:center;margin-top:8px">Nenhum serviço concluído neste período</p>`:''}
       </div>`;
     }).join(''):`<div class="card empty">${ICON.cut(36,'#252525')}<p>Nenhum barbeiro cadastrado</p><button class="btn btn-primary" onclick="cfgTab='barbearia';setView('configuracoes')">Cadastrar Barbeiro</button></div>`}`;
-}
-  function gerarRelatorioBarbeiro(b){
+}function gerarRelatorioBarbeiro(b){
   const com = state.config.comissoes||{};
-  const dias = barbModo==='semana'?weekDays(barbFiltro):[];
- const filtroAg = a=>{
+ const dias = barbModo==='semana'?weekDays(barbFiltro):[];
+  const filtroAg = a=>{
     if(barbModo==='periodo') return (a.data||'')>=barbFiltroInicio&&(a.data||'')<=barbFiltroFim;
     if(barbModo==='dia') return a.data===barbFiltro;
     if(barbModo==='semana') return dias.includes(a.data);
     return (a.data||'').startsWith(barbFiltro.slice(0,7));
   };
+  const ultimoPagto = (state.config.comissoesPagas||{})[b]||0;
   const ags = state.agendamentos.filter(a=>a.barbeiro===b&&a.status==='concluido'&&filtroAg(a));
   const agsPag = ags.filter(a=>!a.ePacote);
   const receita = agsPag.reduce((s,a)=>{
@@ -1407,7 +1534,7 @@ ${barbModo==='periodo'?`
   });
   const linhasDetalhes = agsPag
     .slice()
-  .sort((a,x)=>`${a.data}${a.hora}`>`${x.data}${x.hora}`?1:-1)
+   .sort((a,x)=>`${a.data}${a.hora}`>`${x.data}${x.hora}`?1:-1)
     .map(a=>{
       const lanc=a.lancamentoId?state.lancamentos.find(l=>l.id===a.lancamentoId):null;
       const baseServ=lanc?lanc.valor:(a.preco||servicoPreco(a.servico)||0);
@@ -1453,6 +1580,17 @@ ${barbModo==='periodo'?`
   .total-row td{font-weight:700;background:#fafafa;border-top:2px solid #e5e7eb}
   .footer{margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center}
   @media print{body{background:#fff;padding:0}.wrap{box-shadow:none;border-radius:0;padding:20px}}
+  @media (max-width:600px){
+    body{padding:10px}
+    .wrap{padding:18px 14px;border-radius:8px}
+    h1{font-size:17px}
+    .cards{grid-template-columns:1fr 1fr;gap:8px}
+    .cards .c:last-child{grid-column:1/-1}
+    .c .val{font-size:17px}
+    table{font-size:11px}
+    th,td{padding:6px 6px}
+    th:nth-child(3),td:nth-child(3){display:none} /* oculta coluna Cliente em telas pequenas */
+  }
 </style></head><body>
 <div class="wrap">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
@@ -1696,7 +1834,10 @@ function viewFinanceiro(){
   const showNav=finModo!=='tudo';
   return `
     <div class="sec-head"><div><h1>Financeiro</h1><p>Controle de entradas e saídas</p></div>
-      <button class="btn btn-primary" onclick="modalLanc()">+ Novo Lançamento</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm" onclick="gerarRelatorioFinanceiro()" style="border-color:var(--gold);color:var(--gold)">📄 Relatório</button>
+        <button class="btn btn-primary" onclick="modalLanc()">+ Novo Lançamento</button>
+      </div></div>
     <div class="tabs" style="margin-bottom:12px">${modos.map(([id,l])=>`<button class="tab ${finModo===id?'active':''}" onclick="finModo='${id}';render()">${l}</button>`).join('')}</div>
     ${finModo==='dia'?`<input type="date" class="inp" style="max-width:180px;margin-bottom:14px" value="${finFiltro}" onchange="finFiltro=this.value;render()">`:
       finModo==='mes'?`<input type="month" class="inp" style="max-width:180px;margin-bottom:14px" value="${finFiltro.slice(0,7)}" onchange="finFiltro=this.value+'-01';render()">`:
@@ -1730,7 +1871,7 @@ function viewFinanceiro(){
             <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">${l.categoria?`<span style="font-size:11px;color:var(--text-2)">${esc(l.categoria)}</span>`:''}
               ${!isInfoPacote?`<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:${FP_COLOR[l.formaPagamento]||'#9CA3AF'}18;color:${FP_COLOR[l.formaPagamento]||'#9CA3AF'}">${fmtPayment(l.formaPagamento)}</span>`:'<span style="font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;background:var(--blue-bg);color:var(--blue)">📦 Pacote</span>'}
             </div>
-            ${taxa>0.001?`<div style="font-size:10px;color:var(--amber);margin-top:4px">Taxa: −${fmtMoney(taxa)} → Líquido: ${fmtMoney(l.valorLiquido)}</div>`:''}</div>
+            ${taxa>0.001?`<div style="font-size:10px;color:var(--amber);margin-top:4px">Taxa: −${fmtMoney(taxa)} → Líquido: ${fmtMoney(l.valorLiquido)}</div>`:''}${l.precoVigente!=null&&l.origem==='agendamento'?`<div style="font-size:10px;color:var(--text-3);margin-top:2px">Tabela na época: ${fmtMoney(l.precoVigente)}</div>`:''}</div>
           <div style="text-align:right;flex-shrink:0;margin-left:10px"><div style="font-size:15px;font-weight:700;color:${valorCor}">${valorStr}</div><div style="font-size:10px;color:var(--text-3);margin-top:2px">${fmtDate(l.data)}</div></div>
         </div>
         <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-red" style="font-size:10px;padding:4px 10px" onclick="delLanc('${l.id}')">Remover</button></div>
@@ -1740,6 +1881,143 @@ function viewFinanceiro(){
     </div>`:''}`;
 }
 function delLanc(id){ if(confirm('Remover lançamento?')){ state.lancamentos=state.lancamentos.filter(l=>l.id!==id); save('lancamentos'); render(); } }
+
+function gerarRelatorioFinanceiro(){
+  const lista = finLista().slice().sort((a,b)=>{
+    const cmp = (a.data||'').localeCompare(b.data||'');
+    return cmp !== 0 ? cmp : (a.createdAt||0)-(b.createdAt||0);
+  });
+  const ent = lista.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+(l.valorLiquido??l.valor),0);
+  const sai = lista.filter(l=>l.tipo==='saida').reduce((s,l)=>s+l.valor,0);
+  const saldo = ent-sai;
+  const fps=['pix','dinheiro','debito','credito'];
+  const fpLabels={pix:'Pix',dinheiro:'Dinheiro',debito:'Débito',credito:'Crédito'};
+  const fpColors={pix:'#10B981',dinheiro:'#3B82F6',debito:'#8B5CF6',credito:'#F59E0B'};
+  const entFP = fps.map(fp=>({fp,v:lista.filter(l=>l.tipo==='entrada'&&l.formaPagamento===fp).reduce((s,l)=>s+(l.valorLiquido??l.valor),0)})).filter(x=>x.v>0);
+  const catSai = {};
+  lista.filter(l=>l.tipo==='saida').forEach(l=>{ const c=l.categoria||'Outros'; catSai[c]=(catSai[c]||0)+l.valor; });
+  const barbearia = state.config.barbearia?.nome||'Barbearia';
+  const periodo = periodoLabel();
+
+  const linhasLanc = lista.map(l=>{
+    const isInfoPacote = l.origem==='pacote_informativo';
+    const valorExib = isInfoPacote?'—':((l.tipo==='entrada'?'+':'-')+fmtMoney(l.tipo==='entrada'?(l.valorLiquido??l.valor):l.valor));
+    const taxa = (!isInfoPacote&&l.tipo==='entrada'&&(l.formaPagamento==='debito'||l.formaPagamento==='credito'))?(l.valor-(l.valorLiquido??l.valor)):0;
+    const cor = isInfoPacote?'#60A5FA':l.tipo==='entrada'?'#16a34a':'#dc2626';
+    const barbLanc = (() => { const ag = state.agendamentos.find(a=>a.lancamentoId===l.id); return ag?.barbeiro||''; })();
+    return `<tr>
+      <td>${fmtDate(l.data)}</td>
+      <td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:${l.tipo==='entrada'?'#dcfce7':'#fee2e2'};color:${l.tipo==='entrada'?'#16a34a':'#dc2626'}">${l.tipo==='entrada'?'ENTRADA':'SAÍDA'}</span></td>
+      <td>${esc(l.descricao||'—')}</td>
+      <td>${esc(barbLanc||'—')}</td>
+      <td>${esc(l.categoria||'—')}</td>
+      <td>${isInfoPacote?'📦 Pacote':fpLabels[l.formaPagamento]||l.formaPagamento||'—'}</td>
+      <td style="text-align:right">${taxa>0.001?`<span style="font-size:10px;color:#d97706">Bruto: ${fmtMoney(l.valor)}<br>Taxa: -${fmtMoney(taxa)}</span>`:''}</td>
+      <td style="text-align:right">${l.precoVigente!=null&&l.origem==='agendamento'?fmtMoney(l.precoVigente):'—'}</td>
+      <td style="text-align:right;font-weight:700;color:${cor}">${valorExib}</td>
+    </tr>`;
+  }).join('');
+
+  const linhasCatSai = Object.entries(catSai).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<tr><td>${esc(c)}</td><td style="text-align:right;color:#dc2626;font-weight:600">-${fmtMoney(v)}</td></tr>`).join('');
+  const linhasEntFP = entFP.map(x=>`<tr><td>${fpLabels[x.fp]||x.fp}</td><td style="text-align:right;color:#16a34a;font-weight:600">+${fmtMoney(x.v)}</td></tr>`).join('');
+
+  const html=`<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Relatório Financeiro — ${esc(barbearia)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#f9f9f9;color:#1a1a1a;padding:24px}
+  .wrap{max-width:780px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+  h1{font-size:22px;margin-bottom:2px}
+  .sub{color:#666;font-size:13px;margin-bottom:24px}
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px}
+  .kpi{background:#f3f4f6;border-radius:8px;padding:14px;text-align:center}
+  .kpi .lbl{font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .kpi .val{font-size:20px;font-weight:700}
+  .kpi.green .val{color:#16a34a}.kpi.red .val{color:#dc2626}.kpi.blue .val{color:#2563eb}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
+  h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin:0 0 10px}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:28px}
+  th{background:#f3f4f6;padding:8px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280}
+  td{padding:7px 10px;border-bottom:1px solid #f0f0f0;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .total-row td{font-weight:700;background:#fafafa;border-top:2px solid #e5e7eb}
+  .footer{margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center}
+  @media print{body{background:#fff;padding:0}.wrap{box-shadow:none;border-radius:0;padding:20px}}
+  @media(max-width:600px){
+    body{padding:8px}
+    .wrap{padding:14px 10px}
+    h1{font-size:17px}
+    .kpis{grid-template-columns:1fr 1fr}
+    .kpis .kpi:last-child{grid-column:1/-1}
+    .kpi .val{font-size:16px}
+    .split{grid-template-columns:1fr}
+    table{font-size:11px}
+    th,td{padding:5px 5px}
+    /* oculta colunas menos essenciais no mobile */
+    table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5),th:nth-child(6),td:nth-child(6){display:none}
+</style></head><body>
+<div class="wrap">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+    <div>
+      <h1>💰 Relatório Financeiro</h1>
+      <div class="sub">${esc(barbearia)} · ${esc(periodo)}</div>
+    </div>
+    <div style="text-align:right;font-size:11px;color:#9ca3af">Gerado em<br><strong>${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}</strong></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi green"><div class="lbl">Entradas</div><div class="val">+${fmtMoney(ent)}</div></div>
+    <div class="kpi red"><div class="lbl">Saídas</div><div class="val">-${fmtMoney(sai)}</div></div>
+    <div class="kpi ${saldo>=0?'green':'red'}"><div class="lbl">Saldo</div><div class="val">${saldo>=0?'+':''}${fmtMoney(saldo)}</div></div>
+  </div>
+
+  <div class="split">
+    <div>
+      <h2>Entradas por pagamento</h2>
+      <table>
+        <thead><tr><th>Forma</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>${linhasEntFP||'<tr><td colspan="2" style="text-align:center;color:#9ca3af">—</td></tr>'}</tbody>
+        <tfoot><tr class="total-row"><td>Total</td><td style="text-align:right;color:#16a34a">+${fmtMoney(ent)}</td></tr></tfoot>
+      </table>
+    </div>
+    <div>
+      <h2>Saídas por categoria</h2>
+      <table>
+        <thead><tr><th>Categoria</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>${linhasCatSai||'<tr><td colspan="2" style="text-align:center;color:#9ca3af">—</td></tr>'}</tbody>
+        <tfoot><tr class="total-row"><td>Total</td><td style="text-align:right;color:#dc2626">-${fmtMoney(sai)}</td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <h2>Lançamentos em ordem cronológica</h2>
+  <table>
+    <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Barbeiro</th><th>Categoria</th><th>Pagamento</th><th>Taxa</th><th>Preço Tabela</th><th style="text-align:right">Valor Líquido</th></tr></thead>
+    <tbody>${linhasLanc||'<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:20px">Nenhum lançamento no período</td></tr>'}</tbody>
+    <tfoot>
+      <tr class="total-row"><td colspan="6">Total Entradas (líquido)</td><td style="text-align:right;color:#16a34a">+${fmtMoney(ent)}</td></tr>
+      <tr class="total-row"><td colspan="6">Total Saídas</td><td style="text-align:right;color:#dc2626">-${fmtMoney(sai)}</td></tr>
+      <tr class="total-row"><td colspan="6">Saldo do Período</td><td style="text-align:right;color:${saldo>=0?'#16a34a':'#dc2626'};font-size:15px">${saldo>=0?'+':''}${fmtMoney(saldo)}</td></tr>
+    </tfoot>
+  </table>
+
+  <div class="footer">${esc(barbearia)} · Relatório Financeiro gerado pelo sistema Na Régua</div>
+</div>
+</body></html>`;
+
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const w=window.open(url,'_blank');
+  if(!w){
+    const a=document.createElement('a');
+    a.href=url; a.download=`financeiro_${periodoLabel().replace(/\s/g,'_').replace(/[\/–]/g,'-')}.html`;
+    a.click();
+  }
+}
+
 let lancTmp={tipo:'entrada',formaPagamento:'pix'};
 const CATS_SAIDA=['Aluguel','Água/Luz/Internet','Material','Produto/Estoque','Salário','Manutenção','Alimentação','Impostos','Outros'];
 function modalLanc(tipoInicial){
@@ -1860,10 +2138,9 @@ function modalProduto(id){
     <div class="field"><label class="lbl">Categoria</label><select id="p-cat" class="inp">${CATS_PROD.map(c=>`<option ${p.categoria===c?'selected':''}>${c}</option>`).join('')}</select></div>
     <div class="field"><label class="lbl">Descrição</label><input id="p-desc" class="inp" value="${esc(p.descricao)}" placeholder="Opcional"></div>
     <div class="row2"><div class="field"><label class="lbl">Preço de Venda (R$)</label><input id="p-preco" type="number" step="0.01" min="0" class="inp" value="${p.preco}" placeholder="0,00"></div>
-    <div class="field"><label class="lbl">Custo do Produto (R$)</label><input id="p-custo" type="number" step="0.01" min="0" class="inp" value="${p.custo||''}" placeholder="0,00"></div></div>
+      <div class="field"><label class="lbl">Custo do Produto (R$)</label><input id="p-custo" type="number" step="0.01" min="0" class="inp" value="${p.custo||''}" placeholder="0,00"></div></div>
     <div class="row2"><div class="field"><label class="lbl">Estoque</label><input id="p-est" type="number" min="0" class="inp" value="${p.estoque}" placeholder="0"></div>
-    <div class="field"><label class="lbl" style="opacity:0">-</label><div style="padding:10px 12px;background:var(--inner);border-radius:8px;font-size:12px;color:var(--text-2);margin-top:0">${(p.preco&&p.custo)?`Margem: <strong style="color:var(--green)">${fmtMoney((p.preco||0)-(p.custo||0))}
-    </strong>`:'Margem aparece ao preencher preço e custo'}</div></div></div>
+      <div class="field"><label class="lbl" style="opacity:0">-</label><div style="padding:10px 12px;background:var(--inner);border-radius:8px;font-size:12px;color:var(--text-2);margin-top:0">${(p.preco&&p.custo)?`Margem: <strong style="color:var(--green)">${fmtMoney((p.preco||0)-(p.custo||0))}</strong>`:'Margem aparece ao preencher preço e custo'}</div></div></div>
     <div class="field"><label class="lbl">Data de Validade</label><input id="p-val" type="date" class="inp" value="${p.validade||''}"></div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveProduto('${id||''}')">Salvar</button></div>
   `);
@@ -1880,7 +2157,7 @@ function lerFoto(e){
 function saveProduto(id){
   const g=x=>document.getElementById(x).value;
   const nome=g('p-nome').trim(); if(!nome){ alert('Informe o nome.'); return; }
-const data={nome,categoria:g('p-cat'),descricao:g('p-desc').trim(),preco:parseFloat(g('p-preco'))||0,custo:parseFloat(g('p-custo'))||0,validade:g('p-val'),estoque:g('p-est')!==''?parseInt(g('p-est')):'',fotoUrl:prodFoto};
+  const data={nome,categoria:g('p-cat'),descricao:g('p-desc').trim(),preco:parseFloat(g('p-preco'))||0,custo:parseFloat(g('p-custo'))||0,validade:g('p-val'),estoque:g('p-est')!==''?parseInt(g('p-est')):'',fotoUrl:prodFoto};
   if(id) state.produtos=state.produtos.map(p=>p.id===id?{...p,...data}:p);
   else state.produtos.push({...data,id:uid(),createdAt:Date.now()});
   save('produtos'); closeModal(); render();
@@ -1896,7 +2173,7 @@ function viewConfig(){
   if(cfgTab==='barbearia'){
     body=`<div class="card">
     ${isDono()?`<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
- <button class="btn btn-primary" onclick="modalCadastrarFuncionario()">+ Cadastrar Funcionário</button>
+  <button class="btn btn-primary" onclick="modalCadastrarFuncionario()">+ Cadastrar Funcionário</button>
   <button class="btn" onclick="modalGerenciarAcessos()">👥 Gerenciar Acessos</button>
   <button class="btn btn-red" onclick="fazerLogout()">🚪 Sair do sistema</button>
 </div>`:`<div style="margin-bottom:16px"><button class="btn btn-red" onclick="fazerLogout()">🚪 Sair do sistema</button></div>`}
@@ -2142,7 +2419,7 @@ function exportarBackup(){
   const dados={clientes:state.clientes,agendamentos:state.agendamentos,lancamentos:state.lancamentos,produtos:state.produtos,lembretesEnviados:state.lembretesEnviados,notifAlteracao:state.notifAlteracao,notas:state.notas,config:state.config,exportadoEm:new Date().toISOString()};
   const blob=new Blob([JSON.stringify(dados,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download='backup-na-regua-'+new Date().toISOString().slice(0,10)+'.json';
+  a.download='backup-barbearia-'+new Date().toISOString().slice(0,10)+'.json';
   a.click(); URL.revokeObjectURL(a.href);
 }
 function importarBackup(e){
@@ -2349,7 +2626,53 @@ async function boot(){
   setInterval(verificarNotificacoes, 60000);
 }
 boot();
-window.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal(); closeDrawer(); } });
+window.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal(); closeDrawer(); if(_modoOpAtivo)toggleModoOp(); } });
+
+/* ============ MODO OPERAÇÃO (Melhoria 13) ============ */
+let _modoOpAtivo=false;
+let _modoOpInterval=null;
+function toggleModoOp(){
+  _modoOpAtivo=!_modoOpAtivo;
+  const ov=document.getElementById('modo-op-overlay');
+  if(_modoOpAtivo){
+    ov.style.display='flex';
+    renderModoOp();
+    _modoOpInterval=setInterval(renderModoOp,30000);
+  } else {
+    ov.style.display='none';
+    clearInterval(_modoOpInterval);
+  }
+  const btn=document.getElementById('btn-modo-op');
+  if(btn) btn.innerHTML=_modoOpAtivo?ICON.x(22,'#0A0A0A'):ICON.scissors(22,'#0A0A0A');
+}
+function renderModoOp(){
+  const ov=document.getElementById('modo-op-overlay'); if(!ov) return;
+  const agora=new Date();
+  const agoraStr=todayStr();
+  const horaStr=String(agora.getHours()).padStart(2,'0')+':'+String(agora.getMinutes()).padStart(2,'0');
+  const proximos=state.agendamentos.filter(a=>a.status==='agendado'&&a.data===agoraStr).sort((a,b)=>a.hora>b.hora?1:-1);
+  const prox=proximos[0]||null;
+  const barbearia=state.config.barbearia?.nome||'Barbearia';
+  ov.innerHTML=`
+    <div style="position:absolute;top:20px;right:24px;font-size:28px;font-weight:700;color:var(--text-2)">${horaStr}</div>
+    <button onclick="toggleModoOp()" style="position:absolute;top:20px;left:20px;background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--text-3);cursor:pointer;font-size:13px;font-weight:600">✕ Sair</button>
+    <div style="margin-bottom:10px">${ICON.scissors(44,'#C9A84C')}</div>
+    <div style="font-size:13px;color:var(--text-3);margin-bottom:28px">${esc(barbearia)}</div>
+    ${prox?`
+      <div style="font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">Próximo cliente</div>
+      <div style="font-size:52px;font-weight:700;color:var(--gold);line-height:1;margin-bottom:6px">${esc(prox.hora)}</div>
+      <div style="font-size:30px;font-weight:700;margin-bottom:5px">${esc(prox.clienteNome)}</div>
+      <div style="font-size:18px;color:var(--text-2);margin-bottom:6px">${esc(prox.servico)}</div>
+      ${prox.barbeiro?`<div style="font-size:13px;color:var(--text-3);margin-bottom:30px">✂️ ${esc(prox.barbeiro)}</div>`:'<div style="margin-bottom:30px"></div>'}
+      <button onclick="modalConcluir('${prox.id}')" style="background:var(--green);border:none;border-radius:14px;padding:18px 48px;font-size:20px;font-weight:700;color:#fff;cursor:pointer;letter-spacing:.02em">✓ Concluir atendimento</button>
+      ${proximos.length>1?`<div style="margin-top:28px;font-size:13px;color:var(--text-3)">A seguir: <strong style="color:var(--text)">${esc(proximos[1].hora)} · ${esc(proximos[1].clienteNome)}</strong></div>`:''}
+    `:`
+      <div style="font-size:20px;color:var(--text-3);margin-top:10px">Nenhum agendamento pendente hoje</div>
+      <div style="font-size:13px;color:var(--text-3);margin-top:8px">Bora descansar! ✂️</div>
+    `}
+  `;
+}
+setTimeout(()=>{ const btn=document.getElementById('btn-modo-op'); if(btn) btn.innerHTML=ICON.scissors(22,'#0A0A0A'); },100);
 </script>
 </body>
 </html>
