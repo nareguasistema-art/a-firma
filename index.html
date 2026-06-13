@@ -198,6 +198,7 @@
     <header id="topbar">
       <button class="burger" onclick="openDrawer()" aria-label="Abrir menu"></button>
       <div class="brand" id="topbar-brand"><span>Na Régua</span></div>
+      <button class="top-action" id="btn-modo-op" onclick="toggleModoOp()" title="Modo Operação" aria-label="Modo Operação"></button>
       <button class="top-action" id="btn-tema" onclick="toggleTema()" aria-label="Alternar tema"></button>
       <button class="top-action" id="btn-sino" onclick="setView('lembretes')" aria-label="Lembretes"><span id="lembrete-badge"></span></button>
       <button class="top-action" id="btn-novo" onclick="modalAgenda()" aria-label="Novo agendamento"></button>
@@ -209,7 +210,7 @@
 <div id="auth-root"></div>
 <div id="pin-overlay"></div>
 <div id="modo-op-overlay" style="display:none;position:fixed;inset:0;z-index:9990;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center"></div>
-<button id="btn-modo-op" onclick="toggleModoOp()" title="Modo Operação" style="position:fixed;bottom:20px;right:20px;z-index:9000;width:52px;height:52px;border-radius:50%;background:var(--gold);border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:pointer"></button>
+<button id="btn-modo-op-placeholder" style="display:none"></button>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -242,6 +243,7 @@ try{
 let auth = null;
 let currentUser = null;
 let currentRole = null; // 'dono' ou 'funcionario'
+let currentBarbeiro = null;
 
 try{ auth = firebase.auth(); }catch(e){ console.warn('Auth init:', e); }
 
@@ -252,7 +254,7 @@ function isFuncionario(){ return currentRole !== null && currentRole !== 'dono';
 async function carregarRole(uid){
   try{
     const doc = await db.collection('usuarios').doc(uid).get();
-    if(doc.exists) return doc.data().role || 'funcionario';
+    if(doc.exists){ const d=doc.data(); currentBarbeiro=d.barbeiro||null; return d.role||'funcionario'; }
   }catch(e){}
   return 'dono';
 }
@@ -262,10 +264,11 @@ if(auth){
     currentUser = user;
     if(user){
       currentRole = await carregarRole(user.uid);
+      if(currentBarbeiro){ agFiltroBarb=currentBarbeiro; agTimelineBarb=currentBarbeiro; }
       document.getElementById('auth-root').innerHTML = '';
       boot();
     } else {
-      currentRole = null;
+      currentRole = null; currentBarbeiro = null;
       mostrarTelaLogin();
     }
   });
@@ -781,6 +784,7 @@ function viewAgenda(){
   lista.sort((a,b)=>a.hora>b.hora?1:-1);
   const barbs=[...new Set(state.agendamentos.map(a=>a.barbeiro).filter(Boolean))];
   const filtroDesc = [agFiltroBarb?`barbeiro: ${agFiltroBarb}`:'', agFiltroStatus?`status: ${ST_LBL[agFiltroStatus]||agFiltroStatus}`:''  ].filter(Boolean).join(' · ');
+  const barbLocked=isFuncionario()&&!!currentBarbeiro;
   return `
     <div class="tabs" style="margin-bottom:0px"><button class="tab ${agSubModo==='lista'?'active':''}" onclick="agSubModo='lista';render()">📋 Lista</button><button class="tab ${agSubModo==='timeline'?'active':''}" onclick="agSubModo='timeline';render()">⏱ Timeline</button></div>
     <div class="sec-head" style="margin-top:16px"><div><h1>Agenda</h1><p>${lista.length} agendamento(s)${filtroDesc?' — '+filtroDesc:''}</p></div>
@@ -791,7 +795,7 @@ function viewAgenda(){
     ${weekStrip()}
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <input type="date" class="inp" style="flex:1;min-width:140px" value="${agFiltro}" onchange="agFiltro=this.value;render()">
-      ${barbs.length>1?`<select class="inp" style="flex:1;min-width:120px" onchange="agFiltroBarb=this.value;render()"><option value="">Todos barbeiros</option>${barbs.map(b=>`<option value="${esc(b)}" ${agFiltroBarb===b?'selected':''}>${esc(b)}</option>`).join('')}</select>`:''}
+      ${barbLocked?`<div class="inp" style="flex:1;min-width:120px;display:flex;align-items:center;gap:6px;color:var(--gold);font-weight:600;font-size:12px">✂️ ${esc(currentBarbeiro)}</div>`:(barbs.length>1?`<select class="inp" style="flex:1;min-width:120px" onchange="agFiltroBarb=this.value;render()"><option value="">Todos barbeiros</option>${barbs.map(b=>`<option value="${esc(b)}" ${agFiltroBarb===b?'selected':''}>${esc(b)}</option>`).join('')}</select>`:'')}
       <select class="inp" style="flex:1;min-width:120px" onchange="agFiltroStatus=this.value;render()"><option value="">Todos status</option>${['agendado','concluido','cancelado'].map(s=>`<option value="${s}" ${agFiltroStatus===s?'selected':''}>${ST_LBL[s]}</option>`).join('')}</select>
     </div>
     ${lista.length?lista.map(a=>`<div class="card list-item" style="padding:15px${a.isWalkIn?';border-left:3px solid var(--amber)':''}">
@@ -823,7 +827,9 @@ function servicoCor(nome){
 /* ============ TIMELINE POR BARBEIRO (Melhoria 2) ============ */
 function viewAgendaTimeline(){
   const barbs=(state.config.barbeiros||[]);
-  if(!agTimelineBarb && barbs.length) agTimelineBarb=barbs[0];
+  if(isFuncionario()&&currentBarbeiro){ agTimelineBarb=currentBarbeiro; }
+  else if(!agTimelineBarb){ agTimelineBarb=currentBarbeiro||(barbs.length?barbs[0]:''); }
+  const barbLocked=isFuncionario()&&!!currentBarbeiro;
   const data=agFiltro||todayStr();
   const slots=[];
   for(let h=7;h<=21;h++){slots.push(String(h).padStart(2,'0')+':00');if(h<21)slots.push(String(h).padStart(2,'0')+':30');}
@@ -838,7 +844,7 @@ function viewAgendaTimeline(){
     </div>
     ${weekStrip()}
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      ${barbs.map(b=>`<button class="btn btn-sm ${agTimelineBarb===b?'btn-primary':''}" onclick="agTimelineBarb='${esc(b)}';render()">${esc(b)}</button>`).join('')}
+      ${barbLocked?`<div style="display:flex;align-items:center;gap:6px;padding:5px 14px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);border-radius:20px;font-size:13px;font-weight:700;color:var(--gold)">✂️ ${esc(currentBarbeiro)}</div>`:barbs.map(b=>`<button class="btn btn-sm ${agTimelineBarb===b?'btn-primary':''}" onclick="agTimelineBarb='${esc(b)}';render()">${esc(b)}</button>`).join('')}
     </div>
     <div class="card" style="padding:12px">
       ${slots.map(slot=>{
@@ -1686,6 +1692,7 @@ function concluirPacote(id){
   }
   state.agendamentos=state.agendamentos.map(x=>x.id===id?{...x,status:'concluido'}:x);
   save('agendamentos'); closeModal(); render();
+  if(_modoOpAtivo){ const ov=document.getElementById('modo-op-overlay'); if(ov) ov.style.display='flex'; setTimeout(renderModoOp,100); }
 }
 function pagarComissao(barbeiro, valor){
   if(!confirm(`Confirmar pagamento de comissão de ${fmtMoney(valor)} para ${barbeiro}?\n\nIsso lançará uma SAÍDA no financeiro e zerará a contagem.`)) return;
@@ -2183,6 +2190,15 @@ function viewConfig(){
       <h3 style="font-size:14px;margin:18px 0 12px">Barbeiros</h3>
       <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">${cfg.barbeiros.map((b,i)=>`<span class="chip">${esc(b)}<button onclick="cfg_delArr('barbeiros',${i})">×</button></span>`).join('')}</div>
       <div style="display:flex;gap:7px"><input class="inp" style="flex:1" placeholder="Nome do barbeiro" onkeydown="if(event.key==='Enter')cfg_addArr('barbeiros',this)"><button class="btn btn-primary" onclick="cfg_addArr('barbeiros',this.previousElementSibling)">Adicionar</button></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3 style="font-size:14px;margin-bottom:4px">✂️ Meu perfil de barbeiro</h3>
+      <p style="font-size:12px;color:var(--text-2);margin-bottom:14px">Vincule sua conta ao seu nome. Agenda e Modo Operação vão abrir direto na sua fila.</p>
+      <div class="field"><label class="lbl">Barbeiro vinculado</label>
+        <select id="dono-barb-sel" class="inp" style="margin-top:4px"><option value="">Nenhum (exibe todos)</option>${cfg.barbeiros.map(b=>`<option value="${esc(b)}" ${(currentBarbeiro||'')=== b?'selected':''}>${esc(b)}</option>`).join('')}</select>
+      </div>
+      <button class="btn btn-primary" onclick="salvarMeuBarbeiro()">Salvar vínculo</button>
+      ${currentBarbeiro?`<p style="font-size:11px;color:var(--green);margin-top:10px">✅ Vinculado a: <strong>${esc(currentBarbeiro)}</strong></p>`:`<p style="font-size:11px;color:var(--text-3);margin-top:10px">Sem vínculo configurado.</p>`}
       <h3 style="font-size:14px;margin:18px 0 12px">Locais de Atendimento</h3>
       ${cfg.locais.map((l,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--inner);border:1px solid var(--border);border-radius:8px;margin-bottom:7px"><span style="font-size:13px">${esc(l.nome)}</span>${i>0?`<button style="background:none;border:none;color:var(--red);font-size:16px" onclick="cfg_delLocal(${i})">×</button>`:''}</div>`).join('')}
       <div style="display:flex;gap:7px;margin-top:4px"><input class="inp" style="flex:1" placeholder="Nome do local" onkeydown="if(event.key==='Enter')cfg_addLocal(this)"><button class="btn btn-primary" onclick="cfg_addLocal(this.previousElementSibling)">Adicionar</button></div>
@@ -2512,28 +2528,27 @@ async function fazerLogout(){
   try{
     const snap = await db.collection('usuarios').get();
     const lista = [];
-    snap.forEach(doc => {
-      const d = doc.data();
-      if(d.role !== 'dono') lista.push({uid: doc.id, ...d});
-    });
-    const el = document.getElementById('lista-acessos');
-    if(!el) return;
-    if(lista.length === 0){
-      el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-3)">Nenhum funcionário cadastrado.</div>`;
-      return;
-    }
-    el.innerHTML = lista.map(f=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:var(--inner);border-radius:8px;margin-bottom:8px">
-        <div>
-          <div style="font-weight:600;font-size:14px">${esc(f.nome||'Sem nome')}</div>
-          <div style="font-size:11px;color:var(--text-3)">${esc(f.email||'')}</div>
+    snap.forEach(doc => { const d=doc.data(); if(d.role!=='dono') lista.push({uid:doc.id,...d}); });
+    const el = document.getElementById('lista-acessos'); if(!el) return;
+    if(lista.length===0){ el.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text-3)">Nenhum funcionário cadastrado.</div>`; return; }
+    const barbs=(state.config.barbeiros||[]);
+    el.innerHTML=lista.map(f=>`
+      <div style="padding:12px;background:var(--inner);border-radius:8px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div><div style="font-weight:600;font-size:14px">${esc(f.nome||'Sem nome')}</div><div style="font-size:11px;color:var(--text-3)">${esc(f.email||'')}</div></div>
+          <button class="btn btn-red" style="font-size:11px;padding:5px 10px;flex-shrink:0;margin-left:10px" onclick="revogarAcesso('${f.uid}','${esc(f.nome||f.email)}')">🚫 Revogar</button>
         </div>
-        <button class="btn btn-red" style="font-size:11px;padding:5px 10px" onclick="revogarAcesso('${f.uid}','${esc(f.nome||f.email)}')">🚫 Revogar</button>
-      </div>
-    `).join('');
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">Barbeiro:</label>
+          <select onchange="vincularBarbeiroFuncionario('${f.uid}',this.value)" style="flex:1;padding:5px 8px;background:var(--inp-bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;outline:none">
+            <option value="" ${!f.barbeiro?'selected':''}>Nenhum</option>
+            ${barbs.map(b=>`<option value="${esc(b)}" ${f.barbeiro===b?'selected':''}>${esc(b)}</option>`).join('')}
+          </select>
+        </div>
+      </div>`).join('');
   } catch(e){
-    const el = document.getElementById('lista-acessos');
-    if(el) el.innerHTML = `<div style="color:var(--red);font-size:12px">Erro ao carregar: ${e.message}</div>`;
+    const el=document.getElementById('lista-acessos');
+    if(el) el.innerHTML=`<div style="color:var(--red);font-size:12px">Erro ao carregar: ${e.message}</div>`;
   }
 }
 
@@ -2543,38 +2558,59 @@ async function revogarAcesso(uid, nome){
     await db.collection('usuarios').doc(uid).delete();
     alert(`✅ Acesso de ${nome} revogado!`);
     modalGerenciarAcessos();
-  } catch(e){
-    alert('Erro ao revogar: ' + e.message);
-  }
+  } catch(e){ alert('Erro ao revogar: '+e.message); }
+}
+async function vincularBarbeiroFuncionario(uid, barbeiro){
+  try{
+    await db.collection('usuarios').doc(uid).update({barbeiro:barbeiro||''});
+    setCloudStatus(barbeiro?`✅ Vinculado a: ${barbeiro}`:'✅ Vínculo removido','#22C55E');
+    setTimeout(()=>setCloudStatus('☁️ Firebase sincronizado','#22C55E'),2500);
+  } catch(e){ alert('Erro ao vincular: '+e.message); }
+}
+async function salvarMeuBarbeiro(){
+  if(!auth||!currentUser){ alert('Você precisa estar logado.'); return; }
+  const sel=document.getElementById('dono-barb-sel'); if(!sel) return;
+  const barbeiro=sel.value;
+  try{
+    await db.collection('usuarios').doc(currentUser.uid).set({role:'dono',email:currentUser.email||'',barbeiro:barbeiro||'',criadoEm:Date.now()},{merge:true});
+    currentBarbeiro=barbeiro||null;
+    if(currentBarbeiro){ agFiltroBarb=currentBarbeiro; agTimelineBarb=currentBarbeiro; if(_modoOpAtivo){_modoOpBarb=currentBarbeiro;renderModoOp();} }
+    render();
+    setCloudStatus(barbeiro?'✅ Barbeiro vinculado: '+barbeiro:'✅ Vínculo removido','#22C55E');
+    setTimeout(()=>setCloudStatus('☁️ Firebase sincronizado','#22C55E'),2500);
+  } catch(e){ alert('Erro ao salvar: '+e.message); }
 }
 async function modalCadastrarFuncionario(){
+  const barbs=(state.config.barbeiros||[]);
   openModal(`
     <div class="modal-head"><h2>Cadastrar Funcionário</h2><button onclick="closeModal()">${ICON.x(20)}</button></div>
     <p style="font-size:12px;color:var(--text-2);margin-bottom:16px">O funcionário receberá acesso apenas à Agenda.</p>
     <div class="field"><label class="lbl">Nome</label><input id="fn-nome" class="inp" placeholder="Nome do funcionário"></div>
     <div class="field"><label class="lbl">Email</label><input id="fn-email" type="email" class="inp" placeholder="email@exemplo.com"></div>
     <div class="field"><label class="lbl">Senha inicial</label><input id="fn-senha" type="password" class="inp" placeholder="Mínimo 6 caracteres"></div>
+    <div class="field"><label class="lbl">Barbeiro vinculado</label>
+      <select id="fn-barb" class="inp"><option value="">Nenhum (acesso geral)</option>${barbs.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('')}</select>
+      <div style="font-size:11px;color:var(--text-3);margin-top:5px">Agenda filtrada automaticamente ao entrar.</div>
+    </div>
     <div class="modal-foot"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="criarFuncionario()">Cadastrar</button></div>
   `);
 }
 
 async function criarFuncionario(){
-  const nome = document.getElementById('fn-nome').value.trim();
-  const email = document.getElementById('fn-email').value.trim();
-  const senha = document.getElementById('fn-senha').value;
+  const nome=document.getElementById('fn-nome').value.trim();
+  const email=document.getElementById('fn-email').value.trim();
+  const senha=document.getElementById('fn-senha').value;
+  const barbeiro=document.getElementById('fn-barb').value.trim();
   if(!nome||!email||senha.length<6){ alert('Preencha todos os campos. Senha mínimo 6 caracteres.'); return; }
   try{
-    // cria o usuário sem deslogar o dono
-    const resp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({email, password:senha, returnSecureToken:true})
-    });
-    const data = await resp.json();
+    const resp=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:senha,returnSecureToken:true})});
+    const data=await resp.json();
     if(data.error){ alert('Erro: '+(data.error.message||'Tente novamente.')); return; }
-    // salva o role no Firestore
-    await db.collection('usuarios').doc(data.localId).set({ nome, email, role:'funcionario', criadoEm: Date.now() });
+    await db.collection('usuarios').doc(data.localId).set({nome,email,role:'funcionario',barbeiro:barbeiro||'',criadoEm:Date.now()});
     closeModal();
-    alert(`✅ Funcionário ${nome} cadastrado!\nEle já pode entrar com o email e senha definidos.`);
+    alert(`✅ Funcionário ${nome} cadastrado!
+Ele já pode entrar com o email e senha definidos.`+(barbeiro?`
+Agenda vinculada: ${barbeiro}`:''));
   } catch(e){ alert('Erro ao cadastrar: '+e.message); }
 }
 /* ============ INIT ============ */
@@ -2628,51 +2664,80 @@ async function boot(){
 boot();
 window.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal(); closeDrawer(); if(_modoOpAtivo)toggleModoOp(); } });
 
-/* ============ MODO OPERAÇÃO (Melhoria 13) ============ */
+/* ============ MODO OPERAÇÃO ============ */
 let _modoOpAtivo=false;
 let _modoOpInterval=null;
+let _modoOpBarb='';
 function toggleModoOp(){
   _modoOpAtivo=!_modoOpAtivo;
   const ov=document.getElementById('modo-op-overlay');
   if(_modoOpAtivo){
-    ov.style.display='flex';
-    renderModoOp();
-    _modoOpInterval=setInterval(renderModoOp,30000);
-  } else {
-    ov.style.display='none';
-    clearInterval(_modoOpInterval);
-  }
+    const barbs=state.config.barbeiros||[];
+    if(!_modoOpBarb){ if(currentBarbeiro){_modoOpBarb=currentBarbeiro;} else{_modoOpBarb=agTimelineBarb||(barbs.length===1?barbs[0]:'');} }
+    ov.style.display='flex'; renderModoOp();
+    _modoOpInterval=setInterval(()=>{const h=document.getElementById('modo-op-hora');if(h){const n=new Date();h.textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');}},15000);
+  } else { ov.style.display='none'; clearInterval(_modoOpInterval); _modoOpBarb=''; }
   const btn=document.getElementById('btn-modo-op');
-  if(btn) btn.innerHTML=_modoOpAtivo?ICON.x(22,'#0A0A0A'):ICON.scissors(22,'#0A0A0A');
+  if(btn) btn.innerHTML=_modoOpAtivo?ICON.x(18,'#EF4444'):ICON.scissors(18,'#C9A84C');
 }
+function modoOpSelecionarBarb(b){_modoOpBarb=b;renderModoOp();}
+function modoOpConcluir(id){modalConcluir(id);}
 function renderModoOp(){
   const ov=document.getElementById('modo-op-overlay'); if(!ov) return;
-  const agora=new Date();
-  const agoraStr=todayStr();
+  const agora=new Date(); const agoraStr=todayStr();
   const horaStr=String(agora.getHours()).padStart(2,'0')+':'+String(agora.getMinutes()).padStart(2,'0');
-  const proximos=state.agendamentos.filter(a=>a.status==='agendado'&&a.data===agoraStr).sort((a,b)=>a.hora>b.hora?1:-1);
+  const barbs=(state.config.barbeiros||[]); const temMultBarbs=barbs.length>1;
+  const proximos=state.agendamentos
+    .filter(a=>a.status==='agendado'&&a.data===agoraStr&&(!_modoOpBarb||a.barbeiro===_modoOpBarb))
+    .sort((a,b)=>a.hora>b.hora?1:-1);
   const prox=proximos[0]||null;
-  const barbearia=state.config.barbearia?.nome||'Barbearia';
-  ov.innerHTML=`
-    <div style="position:absolute;top:20px;right:24px;font-size:28px;font-weight:700;color:var(--text-2)">${horaStr}</div>
-    <button onclick="toggleModoOp()" style="position:absolute;top:20px;left:20px;background:none;border:1px solid var(--border);border-radius:8px;padding:8px 14px;color:var(--text-3);cursor:pointer;font-size:13px;font-weight:600">✕ Sair</button>
-    <div style="margin-bottom:10px">${ICON.scissors(44,'#C9A84C')}</div>
-    <div style="font-size:13px;color:var(--text-3);margin-bottom:28px">${esc(barbearia)}</div>
-    ${prox?`
-      <div style="font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px">Próximo cliente</div>
-      <div style="font-size:52px;font-weight:700;color:var(--gold);line-height:1;margin-bottom:6px">${esc(prox.hora)}</div>
-      <div style="font-size:30px;font-weight:700;margin-bottom:5px">${esc(prox.clienteNome)}</div>
-      <div style="font-size:18px;color:var(--text-2);margin-bottom:6px">${esc(prox.servico)}</div>
-      ${prox.barbeiro?`<div style="font-size:13px;color:var(--text-3);margin-bottom:30px">✂️ ${esc(prox.barbeiro)}</div>`:'<div style="margin-bottom:30px"></div>'}
-      <button onclick="modalConcluir('${prox.id}')" style="background:var(--green);border:none;border-radius:14px;padding:18px 48px;font-size:20px;font-weight:700;color:#fff;cursor:pointer;letter-spacing:.02em">✓ Concluir atendimento</button>
-      ${proximos.length>1?`<div style="margin-top:28px;font-size:13px;color:var(--text-3)">A seguir: <strong style="color:var(--text)">${esc(proximos[1].hora)} · ${esc(proximos[1].clienteNome)}</strong></div>`:''}
-    `:`
-      <div style="font-size:20px;color:var(--text-3);margin-top:10px">Nenhum agendamento pendente hoje</div>
-      <div style="font-size:13px;color:var(--text-3);margin-top:8px">Bora descansar! ✂️</div>
-    `}
-  `;
+  const barbearia=(state.config.barbearia&&state.config.barbearia.nome)||'Barbearia';
+
+  // topbar
+  let html='<div style="position:absolute;top:0;left:0;right:0;padding:env(safe-area-inset-top,0) 16px 0;height:calc(52px + env(safe-area-inset-top,0px));background:var(--card);border-bottom:1px solid var(--border);display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:10px">'
+    +'<div style="display:flex;align-items:center;gap:6px">'+ICON.scissors(16,'#C9A84C')+'<span style="font-size:13px;font-weight:700;color:var(--gold)">'+esc(barbearia)+'</span></div>'
+    +'<button onclick="toggleModoOp()" style="background:var(--red-bg);border:1px solid var(--red);border-radius:8px;padding:5px 14px;color:var(--red);cursor:pointer;font-size:12px;font-weight:700">✕ Sair</button>'
+    +'</div>';
+
+  // tabs de barbeiro
+  let tabs='';
+  if(temMultBarbs){
+    tabs='<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:20px">';
+    barbs.forEach(function(b){
+      const qtd=state.agendamentos.filter(a=>a.status==='agendado'&&a.data===agoraStr&&a.barbeiro===b).length;
+      const ativo=_modoOpBarb===b;
+      tabs+='<button onclick="modoOpSelecionarBarb(this.dataset.b)" data-b="'+esc(b)+'" style="padding:7px 16px;border-radius:20px;border:2px solid '+(ativo?'var(--gold)':'var(--border)')+';background:'+(ativo?'rgba(201,168,76,.15)':'transparent')+';color:'+(ativo?'var(--gold)':'var(--text-3)')+';font-size:13px;font-weight:700;cursor:pointer">'+esc(b)+(qtd>0?' <span style="font-size:11px;opacity:.7">('+qtd+')</span>':'')+'</button>';
+    });
+    const atvTodos=_modoOpBarb==='';
+    tabs+='<button onclick="modoOpSelecionarBarb(\'\')" style="padding:7px 16px;border-radius:20px;border:2px solid '+(atvTodos?'var(--gold)':'var(--border)')+';background:'+(atvTodos?'rgba(201,168,76,.15)':'transparent')+';color:'+(atvTodos?'var(--gold)':'var(--text-3)')+';font-size:13px;font-weight:700;cursor:pointer">Todos</button>';
+    tabs+='</div>';
+  }
+
+  if(prox){
+    html+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;width:100%;padding:0 24px;padding-top:52px;gap:0">'
+      +tabs
+      +'<div style="font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:.16em;margin-bottom:6px">Próximo cliente'+(temMultBarbs&&_modoOpBarb?' · '+esc(_modoOpBarb):'')+'</div>'
+      +'<div id="modo-op-hora" style="font-size:min(72px,18vw);font-weight:700;color:var(--gold);line-height:1;margin-bottom:10px">'+horaStr+'</div>'
+      +'<div style="font-size:min(36px,8vw);font-weight:700;text-align:center;margin-bottom:6px;line-height:1.1">'+esc(prox.clienteNome)+(prox.isWalkIn?' ⚡':'')+'</div>'
+      +'<div style="font-size:min(20px,5vw);color:var(--text-2);margin-bottom:4px">'+esc(prox.servico)+'</div>'
+      +'<div style="font-size:14px;color:var(--text-3);margin-bottom:28px">🕐 '+esc(prox.hora)+((!_modoOpBarb&&prox.barbeiro)?' · ✂️ '+esc(prox.barbeiro):'')+'</div>'
+      +'<button onclick="modoOpConcluir(this.dataset.id)" data-id="'+prox.id+'" style="width:100%;max-width:340px;background:var(--green);border:none;border-radius:16px;padding:18px 24px;font-size:20px;font-weight:700;color:#fff;cursor:pointer;box-shadow:0 4px 24px rgba(34,197,94,.35)">✓ Concluir atendimento</button>';
+    if(proximos.length>1){
+      html+='<div style="margin-top:22px;font-size:13px;color:var(--text-3);text-align:center">A seguir: <strong style="color:var(--text)">'+esc(proximos[1].hora)+' · '+esc(proximos[1].clienteNome)+'</strong>'+(proximos.length>2?' +mais '+(proximos.length-2):'')+'</div>';
+    }
+    html+='</div>';
+  } else {
+    html+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:12px;padding-top:52px">'
+      +tabs
+      +'<div style="font-size:48px">✂️</div>'
+      +'<div style="font-size:20px;font-weight:700;color:var(--text-3)">Agenda limpa'+(temMultBarbs&&_modoOpBarb?' — '+esc(_modoOpBarb):'')+'!</div>'
+      +'<div style="font-size:14px;color:var(--text-3)">Nenhum agendamento pendente hoje</div>'
+      +'<span id="modo-op-hora" style="display:none">'+horaStr+'</span>'
+      +'</div>';
+  }
+  ov.innerHTML=html;
 }
-setTimeout(()=>{ const btn=document.getElementById('btn-modo-op'); if(btn) btn.innerHTML=ICON.scissors(22,'#0A0A0A'); },100);
+setTimeout(()=>{const btn=document.getElementById('btn-modo-op');if(btn)btn.innerHTML=ICON.scissors(18,'#C9A84C');},100);
 </script>
 </body>
 </html>
